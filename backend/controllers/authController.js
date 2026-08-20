@@ -9,6 +9,14 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email and password are required",
+      });
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: {
@@ -23,34 +31,49 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Hash Password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create User
+    // IMPORTANT:
+    // New users are MEMBER by default.
+    // Do not automatically create ADMIN users.
+    const userRole = role || "MEMBER";
+
+    // Create user
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: role || "ADMIN", // Default role
+        role: userRole,
       },
     });
 
-    res.status(201).json({
+    // Don't send password to frontend
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
+
+    return res.status(201).json({
       success: true,
       message: "User Registered Successfully",
-      user,
+      user: safeUser,
     });
 
   } catch (error) {
-    console.log(error);
+    console.error("REGISTER ERROR:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server Error",
     });
   }
 };
+
 
 // =======================
 // Login User
@@ -59,7 +82,15 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find User
+    // Validate fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+
+    // Find user
     const user = await prisma.user.findUnique({
       where: {
         email,
@@ -73,7 +104,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Compare Password
+    // Compare password
     const isMatch = await bcrypt.compare(
       password,
       user.password
@@ -86,7 +117,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate JWT Token
+    // Generate JWT
+    // Both id and role are included.
     const token = jwt.sign(
       {
         id: user.id,
@@ -98,16 +130,25 @@ exports.login = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    // Don't send password to frontend
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
+
+    return res.status(200).json({
       success: true,
       token,
-      user,
+      user: safeUser,
     });
 
   } catch (error) {
-    console.log(error);
+    console.error("LOGIN ERROR:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server Error",
     });

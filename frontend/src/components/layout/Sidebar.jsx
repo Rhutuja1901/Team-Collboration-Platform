@@ -1,8 +1,17 @@
-import { Link, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import {
+  FaTachometerAlt,
+  FaUsers,
+  FaTasks,
+  FaComments,
+  FaClipboardList,
+  FaBell,
+  FaUserCircle,
+  FaSignOutAlt,
+} from "react-icons/fa";
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user"));
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -10,93 +19,107 @@ export default function Sidebar() {
     navigate("/");
   };
 
-  
+  const menu = [
+    {
+      name: "Dashboard",
+      path: "/dashboard",
+      icon: <FaTachometerAlt />,
+    },
+    {
+      name: "Teams",
+      path: "/teams",
+      icon: <FaUsers />,
+    },
+    {
+      name: "Tasks",
+      path: "/tasks",
+      icon: <FaTasks />,
+    },
+    {
+      name: "Kanban",
+      path: "/kanban",
+      icon: <FaClipboardList />,
+    },
+    {
+      name: "Team Chat",
+      path: "/chat",
+      icon: <FaComments />,
+    },
+    {
+      name: "Notifications",
+      path: "/notifications",
+      icon: <FaBell />,
+    },
+    {
+      name: "Profile",
+      path: "/profile",
+      icon: <FaUserCircle />,
+    },
+  ];
 
   return (
-    <div className="w-64 min-h-screen bg-gray-900 text-white p-6">
-      <h1 className="text-3xl font-bold mb-8">
-        TeamCollab
-      </h1>
+    <aside className="fixed top-0 left-0 w-72 h-screen bg-slate-900 text-white shadow-2xl flex flex-col z-50">
 
-      <nav className="flex flex-col gap-3">
-        <Link
-          to="/dashboard"
-          className="px-4 py-2 rounded hover:bg-gray-700 transition"
-        >
-          📊 Dashboard
-        </Link>
+      {/* Logo */}
 
-        {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
-          <>
-            <Link
-              to="/teams"
-              className="px-4 py-2 rounded hover:bg-gray-700 transition"
-            >
-              👥 Teams
-            </Link>
+      <div className="px-8 py-7 border-b border-slate-700">
 
-            <Link
-  to="/kanban"
-  className="px-4 py-2 rounded hover:bg-gray-700 transition"
->
-  📌 Kanban Board
-</Link>
+        <h1 className="text-3xl font-bold tracking-wide">
+          TeamCollab
+        </h1>
 
-            <Link
-  to="/activity"
-  className="px-4 py-2 rounded hover:bg-gray-700 transition"
->
-  📜 Activity Logs
-</Link>
+        <p className="text-slate-400 mt-2 text-sm">
+          Project Management System
+        </p>
 
-            <Link
-              to="/users"
-              className="px-4 py-2 rounded hover:bg-gray-700 transition"
-            >
-              👤 Users
-            </Link>
-          </>
-        )}
+      </div>
 
-        <Link
-          to="/tasks"
-          className="px-4 py-2 rounded hover:bg-gray-700 transition"
-        >
-          ✅ Tasks
-        </Link>
+      {/* Menu */}
 
-        <Link
-          to="/chat"
-          className="px-4 py-2 rounded hover:bg-gray-700 transition"
-        >
-          💬 Team Chat
-        </Link>
+      <nav className="flex-1 px-5 py-6 overflow-y-auto">
 
-        <Link
-          to="/notifications"
-          className="px-4 py-2 rounded hover:bg-gray-700 transition"
-        >
-          🔔 Notifications
-        </Link>
+        {menu.map((item) => (
 
-        <Link to="/chat">
-  Team Chat
-</Link>
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={({ isActive }) =>
+              `flex items-center gap-4 px-5 py-4 rounded-xl mb-3 transition-all duration-200 ${
+                isActive
+                  ? "bg-blue-600 shadow-lg text-white"
+                  : "text-slate-300 hover:bg-slate-800"
+              }`
+            }
+          >
+            <span className="text-xl">
+              {item.icon}
+            </span>
 
-        <Link
-          to="/profile"
-          className="px-4 py-2 rounded hover:bg-gray-700 transition"
-        >
-          👤 Profile
-        </Link>
+            <span className="font-medium text-base">
+              {item.name}
+            </span>
+
+          </NavLink>
+
+        ))}
+
+      </nav>
+
+      {/* Logout */}
+
+      <div className="p-5 border-t border-slate-700">
 
         <button
           onClick={logout}
-          className="mt-6 px-4 py-2 rounded bg-red-600 hover:bg-red-700 transition text-left"
+          className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 py-3 rounded-xl transition duration-200"
         >
-          🚪 Logout
+          <FaSignOutAlt />
+
+          Logout
         </button>
-      </nav>
-    </div>
+
+      </div>
+
+    </aside>
   );
 }

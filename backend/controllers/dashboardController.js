@@ -2,6 +2,10 @@ const prisma = require("../utils/prisma");
 
 exports.getDashboardStats = async (req, res) => {
   try {
+    // ==========================
+    // Statistics
+    // ==========================
+
     const totalUsers = await prisma.user.count();
 
     const totalTeams = await prisma.team.count();
@@ -26,6 +30,44 @@ exports.getDashboardStats = async (req, res) => {
       },
     });
 
+    // ==========================
+    // Recent Activities
+    // ==========================
+
+    const recentActivities = await prisma.activityLog.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 5,
+    });
+
+    // ==========================
+    // Upcoming Deadlines
+    // ==========================
+
+    const upcomingDeadlines = await prisma.task.findMany({
+      where: {
+        deadline: {
+          gte: new Date(),
+        },
+      },
+      orderBy: {
+        deadline: "asc",
+      },
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        deadline: true,
+        priority: true,
+        status: true,
+      },
+    });
+
+    // ==========================
+    // Response
+    // ==========================
+
     res.json({
       success: true,
       stats: {
@@ -36,6 +78,8 @@ exports.getDashboardStats = async (req, res) => {
         inProgressTasks,
         todoTasks,
       },
+      recentActivities,
+      upcomingDeadlines,
     });
 
   } catch (err) {

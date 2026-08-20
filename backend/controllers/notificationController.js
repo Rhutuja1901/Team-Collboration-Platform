@@ -18,7 +18,7 @@ exports.createNotification = async (req, res) => {
     // Emit notification in real-time
     const io = req.app.get("io");
 
-    io.emit("newNotification", notification);
+    io.to(userId).emit("newNotification", notification);
 
     return res.status(201).json({
       success: true,

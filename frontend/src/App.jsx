@@ -74,15 +74,14 @@ function App() {
           }
         />
 
-        {/* Team Chat */}
         <Route
-          path="/chat"
-          element={
-            <ProtectedRoute>
-              <TeamChat />
-            </ProtectedRoute>
-          }
-        />
+  path="/chat"
+  element={
+    <ProtectedRoute>
+      <TeamChat />
+    </ProtectedRoute>
+  }
+/>
 
         {/* Notifications */}
         <Route

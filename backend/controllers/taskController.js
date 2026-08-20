@@ -1,8 +1,8 @@
 const prisma = require("../utils/prisma");
 
-// ==========================
+// ======================================
 // Create Task
-// ==========================
+// ======================================
 exports.createTask = async (req, res) => {
   try {
     const {
@@ -32,7 +32,13 @@ exports.createTask = async (req, res) => {
       },
       include: {
         team: true,
-        assignedTo: true,
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -44,6 +50,8 @@ exports.createTask = async (req, res) => {
       },
     });
 
+    const io = req.app.get("io");
+
     // Notification
     if (assignedToId) {
       const notification = await prisma.notification.create({
@@ -53,18 +61,24 @@ exports.createTask = async (req, res) => {
         },
       });
 
-      const io = req.app.get("io");
-      io.emit("newNotification", notification);
+      // Send only to assigned user
+      io.to(assignedToId).emit(
+        "newNotification",
+        notification
+      );
     }
 
-    // Realtime event
-    const io = req.app.get("io");
-    io.emit("taskCreated", task);
+    // Broadcast Task Created
+    io.emit("taskCreated", {
+      type: "CREATED",
+      task,
+    });
 
     return res.status(201).json({
       success: true,
       task,
     });
+
   } catch (error) {
     console.error(error);
 
@@ -75,11 +89,12 @@ exports.createTask = async (req, res) => {
   }
 };
 
-// ==========================
-// Get All Tasks
-// ==========================
+// ======================================
+// Get Tasks
+// ======================================
 exports.getTasks = async (req, res) => {
   try {
+
     const tasks = await prisma.task.findMany({
       include: {
         team: true,
@@ -96,25 +111,29 @@ exports.getTasks = async (req, res) => {
       },
     });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       tasks,
     });
+
   } catch (error) {
+
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
     });
+
   }
 };
 
-// ==========================
+// ======================================
 // Update Task Status
-// ==========================
+// ======================================
 exports.updateTaskStatus = async (req, res) => {
   try {
+
     const { id } = req.params;
     const { status } = req.body;
 
@@ -125,6 +144,10 @@ exports.updateTaskStatus = async (req, res) => {
       data: {
         status,
       },
+      include: {
+        assignedTo: true,
+        team: true,
+      },
     });
 
     await prisma.activityLog.create({
@@ -134,41 +157,55 @@ exports.updateTaskStatus = async (req, res) => {
       },
     });
 
-    if (task.assignedToId) {
-      const notification = await prisma.notification.create({
-        data: {
-          userId: task.assignedToId,
-          message: `Task "${task.title}" status changed to ${task.status}`,
-        },
-      });
+    const io = req.app.get("io");
 
-      const io = req.app.get("io");
-      io.emit("newNotification", notification);
+    if (task.assignedToId) {
+
+      const notification =
+        await prisma.notification.create({
+          data: {
+            userId: task.assignedToId,
+            message: `Task "${task.title}" moved to ${task.status}`,
+          },
+        });
+
+      // Personal Notification
+      io.to(task.assignedToId).emit(
+        "newNotification",
+        notification
+      );
     }
 
-    const io = req.app.get("io");
-    io.emit("taskUpdated", task);
+    // Broadcast Task Update
+    io.emit("taskUpdated", {
+      type: "STATUS_UPDATED",
+      task,
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Task Updated Successfully",
+      message: "Task updated successfully",
       task,
     });
+
   } catch (error) {
+
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
     });
+
   }
 };
 
-// ==========================
-// Edit Task Details
-// ==========================
+// ======================================
+// Edit Task
+// ======================================
 exports.updateTask = async (req, res) => {
   try {
+
     const { id } = req.params;
 
     const {
@@ -187,8 +224,14 @@ exports.updateTask = async (req, res) => {
         title,
         description,
         priority,
-        deadline: deadline ? new Date(deadline) : null,
+        deadline: deadline
+          ? new Date(deadline)
+          : null,
         assignedToId: assignedToId || null,
+      },
+      include: {
+        team: true,
+        assignedTo: true,
       },
     });
 
@@ -200,27 +243,35 @@ exports.updateTask = async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.emit("taskUpdated", task);
 
-    return res.status(200).json({
+    io.emit("taskUpdated", {
+      type: "EDITED",
+      task,
+    });
+
+    return res.json({
       success: true,
       task,
     });
+
   } catch (error) {
+
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
     });
+
   }
 };
 
-// ==========================
+// ======================================
 // Delete Task
-// ==========================
+// ======================================
 exports.deleteTask = async (req, res) => {
   try {
+
     const { id } = req.params;
 
     const task = await prisma.task.findUnique({
@@ -250,18 +301,24 @@ exports.deleteTask = async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.emit("taskDeleted", id);
 
-    return res.status(200).json({
+    io.emit("taskDeleted", {
+      id,
+    });
+
+    return res.json({
       success: true,
       message: "Task deleted successfully",
     });
+
   } catch (error) {
+
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
     });
+
   }
 };

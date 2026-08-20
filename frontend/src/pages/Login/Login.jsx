@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+
 import api from "../../services/api";
+import socket from "../../services/socket";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,6 +31,11 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!form.email || !form.password) {
+      toast.warning("Please enter email and password.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -35,32 +43,34 @@ export default function Login() {
 
       console.log("LOGIN API RESPONSE:", res.data);
 
-      // Save token if present
+      // Save JWT Token
       if (res.data.token) {
-        localStorage.setItem(
-          "token",
-          res.data.token
-        );
+        localStorage.setItem("token", res.data.token);
       }
 
-      // Save user if present
+      // Save User
       if (res.data.user) {
         localStorage.setItem(
           "user",
           JSON.stringify(res.data.user)
         );
+
+        // Notify Socket Server User is Online
+        socket.emit("user-online", res.data.user.id);
       }
 
-      alert("Login Successful");
+      toast.success("Login Successful!");
 
-      navigate("/dashboard");
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1000);
 
     } catch (err) {
       console.error(err);
 
-      alert(
+      toast.error(
         err.response?.data?.message ||
-        "Login Failed"
+          "Login Failed. Please try again."
       );
     } finally {
       setLoading(false);
@@ -89,7 +99,7 @@ export default function Login() {
               value={form.email}
               onChange={handleChange}
               placeholder="Enter your email"
-              className="w-full border p-3 rounded"
+              className="w-full border p-3 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
@@ -105,7 +115,7 @@ export default function Login() {
               value={form.password}
               onChange={handleChange}
               placeholder="Enter your password"
-              className="w-full border p-3 rounded"
+              className="w-full border p-3 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
@@ -113,7 +123,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {loading ? "Logging in..." : "Login"}
           </button>

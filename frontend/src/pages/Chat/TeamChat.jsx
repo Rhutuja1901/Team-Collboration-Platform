@@ -1,37 +1,48 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/layout/Layout";
 import api from "../../services/api";
-import { io } from "socket.io-client";
-
-const socket = io("http://localhost:5001");
+import socket from "../../services/socket";
 
 export default function TeamChat() {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState("");
   const [messages, setMessages] = useState([]);
-  const [message, setMessage] = useState("");
+  const [text, setText] = useState("");
 
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  // ==========================
+  // Load Teams
+  // ==========================
   useEffect(() => {
     fetchTeams();
   }, []);
 
+  // ==========================
+  // Join Team & Listen Messages
+  // ==========================
   useEffect(() => {
-    if (selectedTeam) {
-      fetchMessages(selectedTeam);
+    if (!selectedTeam) return;
 
-      socket.emit("joinTeam", selectedTeam);
+    fetchMessages(selectedTeam);
 
-      socket.on("receiveMessage", (newMessage) => {
-        setMessages((prev) => [...prev, newMessage]);
-      });
+    socket.emit("joinTeam", selectedTeam);
 
-      return () => {
-        socket.emit("leaveTeam", selectedTeam);
-        socket.off("receiveMessage");
-      };
-    }
+    socket.on("receiveMessage", (message) => {
+      if (message.teamId === selectedTeam) {
+        setMessages((prev) => [...prev, message]);
+      }
+    });
+
+    return () => {
+      socket.emit("leaveTeam", selectedTeam);
+      socket.off("receiveMessage");
+    };
   }, [selectedTeam]);
 
+  // ==========================
+  // Fetch Teams
+  // ==========================
   const fetchTeams = async () => {
     try {
       const res = await api.get("/teams");
@@ -41,6 +52,9 @@ export default function TeamChat() {
     }
   };
 
+  // ==========================
+  // Fetch Messages
+  // ==========================
   const fetchMessages = async (teamId) => {
     try {
       const res = await api.get(`/chat/${teamId}`);
@@ -50,34 +64,47 @@ export default function TeamChat() {
     }
   };
 
+  // ==========================
+  // Send Message
+  // ==========================
   const sendMessage = async () => {
-    if (!message.trim() || !selectedTeam) return;
+    if (!text.trim()) return;
+
+    if (!selectedTeam) {
+      alert("Please select a team");
+      return;
+    }
 
     try {
       await api.post("/chat", {
-        message,
+        message: text,
         teamId: selectedTeam,
       });
 
-      setMessage("");
+      setText("");
+
+      fetchMessages(selectedTeam);
+
     } catch (err) {
-      console.log(err);
+      console.log(err.response?.data || err);
+      alert("Failed to send message");
     }
   };
 
   return (
     <Layout>
-      <div className="p-6">
+      <div className="max-w-5xl mx-auto p-6">
+
         <h1 className="text-3xl font-bold mb-6">
           Team Chat
         </h1>
 
+        {/* Select Team */}
+
         <select
-          className="border p-2 rounded mb-4 w-full"
+          className="border rounded-lg p-3 w-full mb-6"
           value={selectedTeam}
-          onChange={(e) =>
-            setSelectedTeam(e.target.value)
-          }
+          onChange={(e) => setSelectedTeam(e.target.value)}
         >
           <option value="">
             Select Team
@@ -93,45 +120,80 @@ export default function TeamChat() {
           ))}
         </select>
 
-        <div className="bg-white rounded shadow p-4 h-[500px] overflow-y-auto">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className="mb-4"
-            >
-              <p className="font-semibold">
-                {msg.sender?.name}
-              </p>
+        {/* Chat Box */}
 
-              <p>{msg.message}</p>
+        <div className="bg-white rounded-lg shadow h-[500px] overflow-y-auto p-5">
 
-              <p className="text-xs text-gray-400">
-                {new Date(
-                  msg.createdAt
-                ).toLocaleString()}
-              </p>
+          {messages.length === 0 ? (
+
+            <div className="text-center text-gray-500 mt-10">
+              No messages yet
             </div>
-          ))}
+
+          ) : (
+
+            messages.map((msg) => (
+
+              <div
+                key={msg.id}
+                className={`mb-4 ${
+                  msg.senderId === user?.id
+                    ? "text-right"
+                    : "text-left"
+                }`}
+              >
+
+                <div
+                  className={`inline-block rounded-lg px-4 py-3 max-w-md ${
+                    msg.senderId === user?.id
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+
+                  <p className="font-bold">
+                    {msg.sender?.name}
+                  </p>
+
+                  <p className="mt-1">
+                    {msg.message}
+                  </p>
+
+                  <small className="block mt-2 text-xs">
+                    {new Date(msg.createdAt).toLocaleString()}
+                  </small>
+
+                </div>
+
+              </div>
+
+            ))
+
+          )}
+
         </div>
 
-        <div className="flex mt-4 gap-2">
+        {/* Input */}
+
+        <div className="flex gap-3 mt-5">
+
           <input
             type="text"
-            className="border flex-1 p-2 rounded"
-            placeholder="Type message..."
-            value={message}
-            onChange={(e) =>
-              setMessage(e.target.value)
-            }
+            placeholder="Type your message..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="flex-1 border rounded-lg p-3"
           />
 
           <button
             onClick={sendMessage}
-            className="bg-blue-600 text-white px-6 rounded"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg"
           >
             Send
           </button>
+
         </div>
+
       </div>
     </Layout>
   );

@@ -7,6 +7,7 @@ const upload = require("../middleware/upload");
 const {
   uploadAttachment,
   getAttachments,
+  deleteAttachment,
 } = require("../controllers/attachmentController");
 
 router.post(
@@ -15,6 +16,14 @@ router.post(
   uploadAttachment
 );
 
-router.get("/:taskId", getAttachments);
+router.get(
+  "/:taskId",
+  getAttachments
+);
+
+router.delete(
+  "/:id",
+  deleteAttachment
+);
 
 module.exports = router;

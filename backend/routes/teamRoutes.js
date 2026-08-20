@@ -12,6 +12,7 @@ const {
   getTeams,
   addMember,
   deleteTeam,
+  getTeamMembers,
 } = require("../controllers/teamController");
 
 // Create Team
@@ -27,6 +28,13 @@ router.get(
   "/",
   verifyToken,
   getTeams
+);
+
+// Get Team Members
+router.get(
+  "/:teamId/members",
+  verifyToken,
+  getTeamMembers
 );
 
 // Add Member

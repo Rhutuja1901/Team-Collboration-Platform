@@ -2,16 +2,46 @@ import { useEffect, useState } from "react";
 import Layout from "../../components/layout/Layout";
 import api from "../../services/api";
 import socket from "../../services/socket";
-
+import { toast } from "react-toastify";
+import { useSearchParams } from "react-router-dom";
 export default function Tasks() {
+  const [searchParams] = useSearchParams();
+
+  const searchQuery =
+    searchParams.get("search") || "";
 
   // ==========================
   // States
   // ==========================
 
   const [tasks, setTasks] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [users, setUsers] = useState([]);
+const [teams, setTeams] = useState([]);
+const [users, setUsers] = useState([]);
+
+const [loading, setLoading] = useState(false);
+
+const [editingTask, setEditingTask] = useState(null);
+
+const [form, setForm] = useState({
+  title: "",
+  description: "",
+  priority: "MEDIUM",
+  deadline: "",
+  teamId: "",
+  assignedToId: "",
+});
+
+const deleteAttachment = async (attachmentId, taskId) => {
+  try {
+    await api.delete(`/attachments/${attachmentId}`);
+
+    fetchAttachments(taskId);
+
+  } catch (err) {
+    console.log(err);
+    alert("Delete failed");
+  }
+};
 
   // Search & Filter
   const [search, setSearch] = useState("");
@@ -29,89 +59,74 @@ export default function Tasks() {
   // Logged-in User
   const currentUser = JSON.parse(localStorage.getItem("user"));
 
-  // Task Form
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    priority: "MEDIUM",
-    deadline: "",
-    teamId: "",
-    assignedToId: "",
-  });
-
+ 
   // ==========================
   // Load Data
   // ==========================
 
   useEffect(() => {
-    fetchTasks();
-    fetchTeams();
-    fetchUsers();
+  fetchTasks();
+  fetchTeams();
+  fetchUsers();
 
-    socket.on("taskCreated", fetchTasks);
-    socket.on("taskUpdated", fetchTasks);
-    socket.on("commentCreated", fetchTasks);
-    socket.on("attachmentUploaded", fetchTasks);
+  socket.on("taskCreated", fetchTasks);
+  socket.on("taskUpdated", fetchTasks);
+  socket.on("taskDeleted", fetchTasks);
 
-    return () => {
-      socket.off("taskCreated");
-      socket.off("taskUpdated");
-      socket.off("commentCreated");
-      socket.off("attachmentUploaded");
-    };
-  }, []);
+  return () => {
+    socket.off("taskCreated");
+    socket.off("taskUpdated");
+    socket.off("taskDeleted");
+  };
+}, []);
 
   // ==========================
   // Fetch Tasks
   // ==========================
 
   const fetchTasks = async () => {
-    try {
-      const res = await api.get("/tasks");
+  try {
+    const res = await api.get("/tasks");
 
-      const allTasks = res.data.tasks || [];
+    const fetchedTasks = res.data.tasks;
 
-      setTasks(allTasks);
+    setTasks(fetchedTasks);
 
-      allTasks.forEach((task) => {
-        fetchComments(task.id);
-        fetchAttachments(task.id);
-      });
+    // Load attachments for every task
+    fetchedTasks.forEach((task) => {
+      fetchAttachments(task.id);
+    });
 
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
+  } catch (err) {
+    console.log(err);
+  }
+};
   // ==========================
   // Fetch Teams
   // ==========================
 
   const fetchTeams = async () => {
-    try {
-      const res = await api.get("/teams");
-
-      setTeams(res.data.teams || []);
-
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
+  try {
+    const res = await api.get("/teams");
+    setTeams(res.data.teams || []);
+  } catch (err) {
+    console.error(err);
+    toast.error("Unable to load teams");
+  }
+};
   // ==========================
   // Fetch Users
   // ==========================
 
   const fetchUsers = async () => {
-    try {
-      const res = await api.get("/users");
-
-      setUsers(res.data.users || []);
-
-    } catch (err) {
-      console.log(err);
-    }
-  };
+  try {
+    const res = await api.get("/users");
+    setUsers(res.data.users || []);
+  } catch (err) {
+    console.error(err);
+    toast.error("Unable to load users");
+  }
+};
 
   // ==========================
   // Fetch Comments
@@ -136,51 +151,75 @@ export default function Tasks() {
   // ==========================
 
   const fetchAttachments = async (taskId) => {
-    try {
-      const res = await api.get(`/attachments/${taskId}`);
+  try {
+    console.log("Fetching attachments for task:", taskId);
 
-      setAttachments((prev) => ({
-        ...prev,
-        [taskId]: res.data.attachments,
-      }));
+    const res = await api.get(`/attachments/${taskId}`);
 
-    } catch (err) {
-      console.log(err);
-    }
-  };
+    console.log(
+      "Attachment response for",
+      taskId,
+      ":",
+      res.data
+    );
+
+    setAttachments((prev) => ({
+      ...prev,
+      [taskId]: res.data.attachments,
+    }));
+
+  } catch (err) {
+    console.error(
+      "Failed to fetch attachments for task:",
+      taskId,
+      err
+    );
+  }
+};
 
   // ==========================
   // Upload Attachment
   // ==========================
 
-    const uploadAttachment = async (taskId) => {
-    try {
-      if (!selectedFile[taskId]) {
-        alert("Please select a file");
-        return;
-      }
+   const uploadAttachment = async (taskId) => {
+  const file = selectedFile[taskId];
 
-      const formData = new FormData();
-      formData.append("file", selectedFile[taskId]);
-      formData.append("taskId", taskId);
+  if (!file) {
+    toast.warning("Please select a file first.");
+    return;
+  }
 
-      await api.post("/attachments", formData);
+  const formData = new FormData();
 
-      setSelectedFile((prev) => ({
-        ...prev,
-        [taskId]: null,
-      }));
+  formData.append("file", file);
+  formData.append("taskId", taskId);
 
-      fetchAttachments(taskId);
+  try {
+    await api.post("/attachments", formData);
 
-      alert("File Uploaded Successfully");
+    toast.success("File uploaded successfully");
 
-    } catch (err) {
-      console.log(err);
-      alert("Upload Failed");
-    }
-  };
+    // Clear selected file
+    setSelectedFile({
+      ...selectedFile,
+      [taskId]: null,
+    });
 
+    // Refresh attachments
+    fetchAttachments(taskId);
+
+  } catch (error) {
+    console.error(
+      "Upload error:",
+      error.response?.data || error
+    );
+
+    toast.error(
+      error.response?.data?.message ||
+      "File upload failed"
+    );
+  }
+};
   // ==========================
   // Add Comment
   // ==========================
@@ -213,49 +252,89 @@ export default function Tasks() {
   // ==========================
 
   const createTask = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      await api.post("/tasks", form);
+  if (!form.title || !form.teamId) {
+    toast.warning("Title and Team are required.");
+    return;
+  }
 
-      alert("Task Created Successfully");
+  setLoading(true);
 
-      setForm({
-        title: "",
-        description: "",
-        priority: "MEDIUM",
-        deadline: "",
-        teamId: "",
-        assignedToId: "",
-      });
+  try {
+    await api.post("/tasks", form);
 
-      fetchTasks();
+    toast.success("Task Created Successfully");
 
-    } catch (err) {
-      console.log(err);
-      alert("Error creating task");
-    }
-  };
+    setForm({
+      title: "",
+      description: "",
+      priority: "MEDIUM",
+      deadline: "",
+      teamId: "",
+      assignedToId: "",
+    });
+
+    fetchTasks();
+
+  } catch (err) {
+    console.error(err);
+
+    toast.error(
+      err.response?.data?.message ||
+      "Unable to create task."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ==========================
   // Update Task Status
   // ==========================
 
-  const updateStatus = async (id, status) => {
-    try {
-      await api.put(`/tasks/${id}`, {
-        status,
-      });
+  const updateTask = async (e) => {
+  e.preventDefault();
 
-      fetchTasks();
+  if (!editingTask) return;
 
-    } catch (err) {
-      console.log(err);
-    }
-  };
+  try {
+
+    await api.put(
+      `/tasks/edit/${editingTask}`,
+      form
+    );
+
+    toast.success("Task Updated Successfully");
+
+    setEditingTask(null);
+
+    setForm({
+      title: "",
+      description: "",
+      priority: "MEDIUM",
+      deadline: "",
+      teamId: "",
+      assignedToId: "",
+    });
+
+    fetchTasks();
+
+  } catch (err) {
+
+    console.error(err);
+
+    toast.error(
+      err.response?.data?.message ||
+      "Unable to update task."
+    );
+
+  }
+};
 
   // ADD DELETE FUNCTION HERE
 const deleteTask = async (id) => {
+
   const confirmDelete = window.confirm(
     "Are you sure you want to delete this task?"
   );
@@ -263,16 +342,24 @@ const deleteTask = async (id) => {
   if (!confirmDelete) return;
 
   try {
+
     await api.delete(`/tasks/${id}`);
+
+    toast.success("Task Deleted Successfully");
 
     fetchTasks();
 
-    alert("Task deleted successfully");
-
   } catch (err) {
-    console.log(err);
-    alert("Delete failed");
+
+    console.error(err);
+
+    toast.error(
+      err.response?.data?.message ||
+      "Unable to delete task."
+    );
+
   }
+
 };
 
   // ==========================
@@ -310,13 +397,40 @@ const deleteTask = async (id) => {
     (task) => task.status === "DONE"
   );
 
-  // ==========================
-  // Task Card
-  // ==========================
 
-  const renderColumn = (title, data) => (
 
-  <div className="bg-gray-100 rounded-lg p-4">
+  const handleChange = (e) => {
+  setForm({
+    ...form,
+    [e.target.name]: e.target.value,
+  });
+};
+
+
+
+    const editTask = (task) => {
+
+  setEditingTask(task.id);
+
+  setForm({
+    title: task.title,
+    description: task.description || "",
+    priority: task.priority,
+    deadline: task.deadline
+      ? task.deadline.substring(0, 10)
+      : "",
+    teamId: task.teamId,
+    assignedToId: task.assignedToId || "",
+  });
+
+};
+// ==========================
+// Task Column
+// ==========================
+
+const renderColumn = (title, data) => (
+
+  <div className="bg-gray-100 rounded-lg p-4 min-h-[500px]">
 
     <h2 className="text-xl font-bold mb-4">
       {title}
@@ -334,7 +448,7 @@ const deleteTask = async (id) => {
 
         <div
           key={task.id}
-          className="bg-white rounded-lg shadow p-4 mb-4"
+          className="bg-white rounded-lg shadow p-4 mb-5"
         >
 
           <h3 className="text-lg font-bold">
@@ -347,6 +461,10 @@ const deleteTask = async (id) => {
 
           <p className="mt-2">
             <strong>Priority:</strong> {task.priority}
+          </p>
+
+          <p>
+            <strong>Status:</strong> {task.status}
           </p>
 
           <p>
@@ -363,10 +481,10 @@ const deleteTask = async (id) => {
 
           <p>
             <strong>Assigned To:</strong>{" "}
-            {task.assignedTo
-              ? task.assignedTo.name
-              : "Not Assigned"}
+            {task.assignedTo?.name || "Unassigned"}
           </p>
+
+          {/* Status */}
 
           <select
             className="border rounded w-full mt-3 p-2"
@@ -375,21 +493,43 @@ const deleteTask = async (id) => {
               updateStatus(task.id, e.target.value)
             }
           >
-            <option value="TODO">To Do</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="DONE">Done</option>
+            <option value="TODO">
+              To Do
+            </option>
+
+            <option value="IN_PROGRESS">
+              In Progress
+            </option>
+
+            <option value="DONE">
+              Done
+            </option>
+
           </select>
 
-          <button
-  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded mt-3 w-full"
-  onClick={() => deleteTask(task.id)}
->
-  Delete Task
-</button>
+          {/* Buttons */}
 
-          {/* ================= COMMENTS ================= */}
+          <div className="flex gap-2 mt-3">
 
-          <div className="mt-4 border-t pt-4">
+            <button
+              onClick={() => editTask(task)}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded w-full"
+            >
+              Edit
+            </button>
+
+            <button
+              onClick={() => deleteTask(task.id)}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded w-full"
+            >
+              Delete
+            </button>
+
+          </div>
+
+          {/* Comments */}
+
+          <div className="mt-5 border-t pt-4">
 
             <h4 className="font-semibold mb-2">
               Comments
@@ -403,7 +543,6 @@ const deleteTask = async (id) => {
                   key={comment.id}
                   className="bg-gray-100 rounded p-2 mb-2"
                 >
-
                   <strong>
                     {comment.user?.name}
                   </strong>
@@ -444,17 +583,17 @@ const deleteTask = async (id) => {
 
           </div>
 
-          {/* ================= ATTACHMENTS ================= */}
+          {/* Attachments */}
 
-          <div className="mt-4 border-t pt-4">
+          <div className="mt-5 border-t pt-4">
 
-            <h4 className="font-semibold mb-2">
+            <h4 className="font-semibold mb-3">
               Attachments
             </h4>
 
             <input
               type="file"
-              className="mb-2"
+              className="mb-3"
               onChange={(e) =>
                 setSelectedFile({
                   ...selectedFile,
@@ -477,21 +616,27 @@ const deleteTask = async (id) => {
                 attachments[task.id].map((file) => (
 
                   <div
-                    key={file.id}
-                    className="border rounded p-2 mt-2"
-                  >
+  key={file.id}
+  className="flex justify-between items-center border rounded-lg p-3 mt-2"
+>
+  <a
+    href={`http://localhost:5001${file.fileUrl}`}
+    target="_blank"
+    rel="noreferrer"
+    className="text-blue-600 underline"
+  >
+    📄 {file.fileName}
+  </a>
 
-                    <a
-                      href={`http://localhost:5000${file.fileUrl}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      {file.fileName}
-                    </a>
-
-                  </div>
-
+  <button
+    onClick={() =>
+      deleteAttachment(file.id, task.id)
+    }
+    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+  >
+    Delete
+  </button>
+</div>
                 ))
 
               ) : (
@@ -516,202 +661,251 @@ const deleteTask = async (id) => {
 
 );
 
-  // ==============================
-  // UI
-  // ==============================
+      // ==============================
+// UI
+// ==============================
 
-  return (
+return (
 
-    <Layout>
+  <Layout>
 
-      <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
 
-        <h1 className="text-3xl font-bold mb-6">
-          Task Management
-        </h1>
+      <div className="flex justify-between items-center mb-8">
 
-        {/* ================= SEARCH ================= */}
+        <div>
 
-        <div className="bg-white shadow rounded-lg p-4 mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">
+            Task Management
+          </h1>
 
-          <input
-            type="text"
-            placeholder="Search Task..."
-            className="border p-2 rounded w-full mb-3"
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-
-            <select
-              className="border p-2 rounded"
-              value={priorityFilter}
-              onChange={(e) =>
-                setPriorityFilter(e.target.value)
-              }
-            >
-              <option value="ALL">All Priority</option>
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </select>
-
-            <select
-              className="border p-2 rounded"
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value)
-              }
-            >
-              <option value="ALL">All Status</option>
-              <option value="TODO">To Do</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="DONE">Done</option>
-            </select>
-
-          </div>
-
-        </div>
-
-        {/* ================= CREATE TASK ================= */}
-
-        <form
-          onSubmit={createTask}
-          className="bg-white shadow rounded-lg p-6 mb-8"
-        >
-
-          <input
-            type="text"
-            placeholder="Task Title"
-            className="border p-2 rounded w-full mb-3"
-            value={form.title}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                title: e.target.value,
-              })
-            }
-            required
-          />
-
-          <textarea
-            placeholder="Description"
-            className="border p-2 rounded w-full mb-3"
-            value={form.description}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                description: e.target.value,
-              })
-            }
-          />
-
-          <select
-            className="border p-2 rounded w-full mb-3"
-            value={form.priority}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                priority: e.target.value,
-              })
-            }
-          >
-            <option value="LOW">Low</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HIGH">High</option>
-          </select>
-
-          <input
-            type="date"
-            className="border p-2 rounded w-full mb-3"
-            value={form.deadline}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                deadline: e.target.value,
-              })
-            }
-          />
-
-          <select
-            className="border p-2 rounded w-full mb-3"
-            value={form.teamId}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                teamId: e.target.value,
-              })
-            }
-            required
-          >
-            <option value="">
-              Select Team
-            </option>
-
-            {teams.map((team) => (
-              <option
-                key={team.id}
-                value={team.id}
-              >
-                {team.name}
-              </option>
-            ))}
-          </select>
-
-          
-
-          <select
-            className="border p-2 rounded w-full mb-4"
-            value={form.assignedToId}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                assignedToId: e.target.value,
-              })
-            }
-          >
-            <option value="">
-              Assign To (Optional)
-            </option>
-
-            {users.map((user) => (
-              <option
-                key={user.id}
-                value={user.id}
-              >
-                {user.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
-          >
-            Create Task
-          </button>
-
-        </form>
-
-        {/* ================= TASK BOARD ================= */}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          {renderColumn("To Do", todo)}
-
-          {renderColumn("In Progress", progress)}
-
-          {renderColumn("Done", done)}
+          <p className="text-gray-500 mt-2">
+            Create, assign, update and manage project tasks.
+          </p>
 
         </div>
 
       </div>
 
-    </Layout>
+        {/* ================= SEARCH & FILTER ================= */}
 
-  );
+<div className="bg-white shadow-lg rounded-xl p-6 mb-8">
 
+  <h2 className="text-xl font-bold mb-5">
+    Search & Filter Tasks
+  </h2>
+
+  <input
+    type="text"
+    placeholder="🔍 Search task by title..."
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    className="w-full border rounded-lg p-3 mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    <select
+      value={priorityFilter}
+      onChange={(e) =>
+        setPriorityFilter(e.target.value)
+      }
+      className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="ALL">
+        All Priorities
+      </option>
+
+      <option value="LOW">
+        🟢 Low
+      </option>
+
+      <option value="MEDIUM">
+        🟡 Medium
+      </option>
+
+      <option value="HIGH">
+        🔴 High
+      </option>
+
+    </select>
+
+    <select
+      value={statusFilter}
+      onChange={(e) =>
+        setStatusFilter(e.target.value)
+      }
+      className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="ALL">
+        All Status
+      </option>
+
+      <option value="TODO">
+        📋 To Do
+      </option>
+
+      <option value="IN_PROGRESS">
+        🚀 In Progress
+      </option>
+
+      <option value="DONE">
+        ✅ Done
+      </option>
+
+    </select>
+
+  </div>
+
+</div>
+
+        {/* ================= CREATE / EDIT TASK ================= */}
+
+<form
+  onSubmit={createTask}
+  className="bg-white shadow-lg rounded-xl p-6 mb-8"
+>
+
+  <h2 className="text-2xl font-bold mb-6">
+    {editingTask ? "Edit Task" : "Create New Task"}
+  </h2>
+
+  <input
+    type="text"
+    name="title"
+    placeholder="Task Title"
+    value={form.title}
+    onChange={handleChange}
+    className="w-full border rounded-lg p-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    required
+  />
+
+  <textarea
+    name="description"
+    placeholder="Task Description"
+    value={form.description}
+    onChange={handleChange}
+    rows="4"
+    className="w-full border rounded-lg p-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+
+    <select
+      name="priority"
+      value={form.priority}
+      onChange={handleChange}
+      className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="LOW">🟢 Low</option>
+      <option value="MEDIUM">🟡 Medium</option>
+      <option value="HIGH">🔴 High</option>
+    </select>
+
+    <input
+      type="date"
+      name="deadline"
+      value={form.deadline}
+      onChange={handleChange}
+      className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+
+    <select
+      name="teamId"
+      value={form.teamId}
+      onChange={handleChange}
+      className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      required
+    >
+      <option value="">
+        Select Team
+      </option>
+
+      {teams.map((team) => (
+        <option
+          key={team.id}
+          value={team.id}
+        >
+          {team.name}
+        </option>
+      ))}
+
+    </select>
+
+  </div>
+
+  <select
+    name="assignedToId"
+    value={form.assignedToId}
+    onChange={handleChange}
+    className="w-full border rounded-lg p-3 mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  >
+    <option value="">
+      Assign User (Optional)
+    </option>
+
+    {users.map((user) => (
+      <option
+        key={user.id}
+        value={user.id}
+      >
+        {user.name} ({user.email})
+      </option>
+    ))}
+
+  </select>
+
+  <div className="flex gap-3">
+
+    <button
+      type="submit"
+      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+    >
+      {editingTask ? "Update Task" : "Create Task"}
+    </button>
+
+    {editingTask && (
+
+      <button
+        type="button"
+        onClick={() => {
+          setEditingTask(null);
+
+          setForm({
+            title: "",
+            description: "",
+            priority: "MEDIUM",
+            deadline: "",
+            teamId: "",
+            assignedToId: "",
+          });
+        }}
+        className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg"
+      >
+        Cancel
+      </button>
+
+    )}
+
+  </div>
+
+</form>
+
+{/* ================= TASK BOARD ================= */}
+
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  {renderColumn("📋 To Do", todo)}
+
+  {renderColumn("🚀 In Progress", progress)}
+
+  {renderColumn("✅ Done", done)}
+
+</div>
+
+</div>
+
+</Layout>
+
+);
 }

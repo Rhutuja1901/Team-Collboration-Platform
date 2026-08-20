@@ -7,9 +7,17 @@ const {
 } = require("../middleware/authMiddleware");
 
 const {
+  createNotification,
   getNotifications,
   markAsRead,
 } = require("../controllers/notificationController");
+
+// Create notification
+router.post(
+  "/",
+  verifyToken,
+  createNotification
+);
 
 // Get notifications
 router.get(
