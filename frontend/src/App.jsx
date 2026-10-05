@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/auth/Register";
@@ -18,6 +19,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <Routes>
 
         {/* Public Routes */}
